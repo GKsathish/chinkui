@@ -1,0 +1,9 @@
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-touch-callout: none; /* Disable iOS touch callout */
+  -webkit-user-select: none;   /* Optional: disable text selection */
+  user-select: none;
+}
+
