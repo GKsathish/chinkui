@@ -1,22 +1,17 @@
-import Cookies from "js-cookie";
-import axios from "axios";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   detectDeviceType,
   detectPlatform,
-  detectTelegramBrowser,
   enterFullScreen,
   isFullScreen,
   isMobileDevice,
   lockOrientation,
 } from "../utils/fullscreenUtils";
-import { useWebSocket } from "../utils/WebSocket";
 import GamePopups from "../utils/GamePopups";
 import isOnline from "is-online";
 import { Table } from "../../store/tablesModel";
 import bougeeLogo from "../../assets/icons/bougeelogo.png";
-import { SpriteAnimation } from "../utils/SpriteAnimation";
 
 
 declare global {
@@ -96,23 +91,37 @@ const PixiPlayer: React.FC = () => {
 
 
 
+  // Calculate container width based on orientation
+  const containerWidth = table?.orientation === "portrait-primary" ? "420px" : "100%";
+
+  // Calculate container height based on device type and orientation
+  const isMobileIOS = detectDeviceType() === "mobile" && detectPlatform() === "ios";
+  const isPortraitPrimary = table?.orientation === "portrait-primary";
+  const heightPercentage = deviceType === "desktop" ? "80%" : "100%";
+  const containerHeight = isMobileIOS
+    ? "100%"
+    : isPortraitPrimary
+    ? "100%"
+    : `min(640px, ${heightPercentage})`;
+
+  // Calculate left position based on orientation and device type
+  const isPortraitNonDesktop = isPortraitPrimary && deviceType !== "desktop";
+  const containerLeft = isPortraitNonDesktop ? "50%" : "auto";
+
+  // Calculate transform based on orientation and device type
+  const containerTransform = isPortraitNonDesktop ? "translateX(-50%)" : "none";
+
   const styles = {
     container: {
       display: "flex",
       flexDirection: "column" as const,
-      width: table?.orientation === "portrait-primary" ? "420px" : "100%",
-      height:
-        detectDeviceType() === "mobile" &&
-        (detectPlatform() === "ios")
-          ? "100%"
-          : table?.orientation === "portrait-primary"
-          ? "100%"
-          : `min(640px, ${deviceType === "desktop" ? "80%" : "100%"})`,
+      width: containerWidth,
+      height: containerHeight,
       minHeight: deviceType === "desktop" ? "370px" : 0,
       position: "relative" as const,
       margin: "auto",
-  left: table?.orientation === "portrait-primary" && deviceType !== "desktop"? "50%" : "auto",
-      transform: table?.orientation === "portrait-primary" && deviceType !== "desktop" ? "translateX(-50%)" : "none",
+      left: containerLeft,
+      transform: containerTransform,
     },
     canvas: {
       flexGrow: 1,
@@ -228,14 +237,14 @@ const PixiPlayer: React.FC = () => {
       
         window.parent.postMessage(
           { type: "NAVIGATE_LOBBY"},
-          "*"
+          `${process.env.REACT_APP_URL}`
         );
 
       };
   }, [navigate]);
 
   window.logoutUser = async () => {
-    window.parent.postMessage({ type: "NAVIGATE_LOGIN" }, "*");
+    window.parent.postMessage({ type: "NAVIGATE_LOGIN" }, `${process.env.REACT_APP_URL}`);
   };
   window.loadingCompleted = async () => {
     console.log("🎮 Game loading completed, hiding loader");
@@ -251,7 +260,7 @@ const PixiPlayer: React.FC = () => {
   };
    useEffect(() => {
       const checkConnectivity = async () => {
-        let stat = "No Internet";
+        let stat;
         try {
           const online = await isOnline();
           stat = online ? "Wi-Fi" : "No Internet";
@@ -291,7 +300,7 @@ const PixiPlayer: React.FC = () => {
     console.log(table,"table")
   const loadPixiGame = async () => {
     // Guard against missing table data
-    if (!table || !table.slug) {
+    if ( !table?.slug) {
       console.log("🚫 Skipping Pixi game load - table or table.slug is undefined");
       console.log("Table state:", table);
       return;
@@ -311,7 +320,7 @@ const PixiPlayer: React.FC = () => {
 
     // Now load the main script
     const scriptId = "pixi-game-script";
-    if (!document.getElementById(scriptId)) {
+    if (document.getElementById(scriptId) === null) {
       const script = document.createElement("script");
       script.src = `https://s3.eu-west-2.amazonaws.com/static.inferixai.link/pixi-game-assets/${table.slug}/main.js`;
       script.type = "module";
@@ -358,7 +367,7 @@ const PixiPlayer: React.FC = () => {
 
   useEffect(() => {
     // Only load the game when table is properly set with a slug
-    if (table && table.slug) {
+    if ( table?.slug) {
       console.log("🚀 Table loaded, starting Pixi game initialization...");
       loadPixiGame();
     } else {
@@ -399,7 +408,7 @@ const PixiPlayer: React.FC = () => {
   }, [webViewState.isWebView, table?.orientation]);
   useEffect(() =>{
     const initializeGame = async () => {
-      if (table && table?.slug ) {
+      if ( table?.slug ) {
         // Check if overlay will appear (Android mobile with empty userType)
         const shouldShowOverlay =
           detectDeviceType() === "mobile" &&
@@ -465,20 +474,7 @@ const PixiPlayer: React.FC = () => {
         ref={gameContainerRef}
       ></div>
 
-      {/* --- Overlay for fullscreen instructions on Android --- */}
-      {/* {(detectDeviceType() === "mobile" &&
-        detectPlatform() === "android" &&
-        (!userType || userType === "")) && (
-          <div
-            style={styles.overlayStyles}
-            onTouchEnd={handleDoubleTap}
-            onClick={() => handleDoubleTap({} as React.TouchEvent)}
-          >
-            <div style={styles.instructionText}>
-              Double tap anywhere to enter fullscreen
-            </div>
-          </div>
-        )} */}
+      
 
       {/* --- Popup if needed --- */}
       {isPopupOpen && (
