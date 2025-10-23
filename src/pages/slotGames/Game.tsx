@@ -1,8 +1,6 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import axios from "axios";
-import { useParams } from "react-router-dom";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams,useParams } from "react-router-dom";
 import SideNav from "../../components/utils/Sidenav";
 import { persistor, RootState } from "../../store/store";
 import { Table } from "../../store/tablesModel";
@@ -10,9 +8,7 @@ import { TableDataMap } from "../../components/utils/constants/tablesData";
 import { tablesLoaded } from "../../store/tablesSlice";
 import { favTablesLoaded } from "../../store/favTablesSlice";
 import { globalWsInstance } from "../../components/utils/WebSocket";
-import bg from '../../assets/game_thumbnail_sprites/background.png'
 import csrfTokenService from "../../components/utils/csrfTokenService";
-import PixiPlayer from "../../components/gamePlayer/PixiPlayer";
 import OverlaySpinner from "../../components/utils/spinners/OverlaySpinner/OverlaySpinner";
 import RotationLockOverlay from "../../components/utils/RotationLockOverlay";
 import useOrientationEnforcement from "../../hooks/useOrientationEnforcement";
@@ -30,7 +26,6 @@ const SlotGame: React.FC = () => {
   const [webView, setWebView] = useState(false);
   const [casinoUrl, setCasinoUrl] = useState("");
   const [isCasinoLoading, setIsCasinoLoading] = useState(false);
-  // const[userType,setUserType]=useState("");
   const dispatch = useDispatch();
 
   // Use the orientation enforcement hook
@@ -65,7 +60,6 @@ const SlotGame: React.FC = () => {
       const tokenParam = searchParams.get("token");
       const userName = searchParams.get("userName");
       const sessionToken = sessionStorage.getItem("token");
-      // setUserType(searchParams.get("userType")||"");
       const userType = searchParams.get("userType");
       if (sessionToken && !tokenParam) {
         setIsValidating(false);
@@ -137,7 +131,8 @@ const SlotGame: React.FC = () => {
         }
       );
 
-      if (response.data && response.data.status === "RS_OK") {
+      if (response?.data && response?.data?.status === "RS_OK") {
+
         const fetchedTables: Table[] = response?.data.tables.map(
           (table: any) => ({
             tableId: table.tableId,
@@ -220,7 +215,7 @@ const SlotGame: React.FC = () => {
 
       if (response.data && response.data.url) {
         // Replace encoded ampersands with regular ampersands
-        const decodedUrl = response.data.url.replace(/\\u0026/g, '&');
+        const decodedUrl = response.data.url.replaceAll(/\\u0026/g, '&');
         console.log("Casino API Response:", response.data);
         console.log("Original URL:", response.data.url);
         console.log("Decoded URL:", decodedUrl);
@@ -280,93 +275,114 @@ const SlotGame: React.FC = () => {
     detectWebView();
   }, []);
 
+  const handleNavigateLobby = () => {
+    const isRegularUser = sessionStorage.getItem("userType") === "REGULAR";
+    if (isRegularUser) {
+      window.parent.postMessage({ type: "NAVIGATE_LOBBY" }, `${process.env.REACT_APP_URL}`);
+    }
+    console.log("Received NAVIGATE_LOBBY message in SlotGame");
+    navigate("/lobby");
+  };
+
+  const handleGameLoaded = () => {
+    const isRegularUser = sessionStorage.getItem("userType") === "REGULAR";
+    if (isRegularUser) {
+      window.parent.postMessage({ type: "GAME_LOADED" }, `${process.env.REACT_APP_URL}`);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const token = sessionStorage.getItem("token");
+      if (!token) {
+        console.warn("No session token found. Redirecting to login.");
+        navigate("/login");
+        return;
+      }
+
+      const response = await csrfTokenService.post(
+        `/api/logout`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.data) {
+        sessionStorage.clear();
+        dispatch(tablesLoaded([]));
+        dispatch(favTablesLoaded([]));
+        if (globalWsInstance) {
+          console.log("Closing WebSocket connection...");
+          globalWsInstance.close();
+        }
+        await persistor.purge();
+        navigate("/login");
+        location.reload();
+        console.log("Logout successful.");
+      } else {
+        console.error("Logout failed. Code:", response.data.code);
+      }
+    } catch (error) {
+      console.error("Error during logout:", error);
+    }
+  };
+
+  const isValidOrigin = (origin: string): boolean => {
+    return origin === `${process.env.REACT_APP_URL}` || origin === `${process.env.REACT_APP_CASINO_URL}`;
+  };
+
   useEffect(() => {
     const handleIframeMessage = (event: MessageEvent) => {
-      // Validate the origin of the message for security
-      if (event.origin !== `${process.env.REACT_APP_URL}`&& event.origin !== `${process.env.REACT_APP_CASINO_URL}`) return;
+      if (!isValidOrigin(event.origin)) return;
 
-      if (event.data && event.data.type === "NAVIGATE_LOBBY") {
-        if(sessionStorage.getItem("userType")==="REGULAR"){
-         window.parent.postMessage({ type: "NAVIGATE_LOBBY" }, "*");
-        }
-         console.log("Received NAVIGATE_LOBBY message in SlotGame");
-        navigate("/lobby");
-      }
-
-      if (event.data && event.data.type === "GAME_LOADED") {
-       if(sessionStorage.getItem("userType")==="REGULAR"){
-        window.parent.postMessage({ type: "GAME_LOADED" }, "*");
-        }
-      }
-
-      if (event.data && event.data.type === "NAVIGATE_LOGIN") {
-        const logoutUser = async () => {
-          try {
-            const token = sessionStorage.getItem("token");
-            if (!token) {
-              console.warn("No session token found. Redirecting to login.");
-              return navigate("login");
-            }
-
-            const response = await csrfTokenService.post(
-              `/api/logout`,
-              {},
-              {
-                headers: {
-                  Authorization: `Bearer ${sessionStorage.getItem("token")}`,
-
-                },
-              }
-            );
-
-            if (response.data) {
-              sessionStorage.clear();
-              dispatch(tablesLoaded([])); // Reset tables state
-              dispatch(favTablesLoaded([])); // Reset favorite tables state
-              if (globalWsInstance) {
-                console.log("Closing WebSocket connection...");
-                globalWsInstance.close();
-              }
-
-              await persistor.purge();
-              navigate("/login");
-              location.reload();
-              console.log("Logout successful.");
-            } else {
-              console.error("Logout failed. Code:", response.data.code);
-            }
-          } catch (error) {
-            console.error("Error during logout:", error);
-          }
-        };
-        logoutUser();
+      if (event.data?.type === "NAVIGATE_LOBBY") {
+        handleNavigateLobby();
+      } else if (event.data?.type === "GAME_LOADED") {
+        handleGameLoaded();
+      } else if (event.data?.type === "NAVIGATE_LOGIN") {
+        handleLogout();
       }
     };
 
     window.addEventListener("message", handleIframeMessage);
-
     return () => {
       window.removeEventListener("message", handleIframeMessage);
     };
   }, [navigate, dispatch]);
 
-  // Get the iframe style based on device type and required orientation
+  const getPixiIframeUrl = () => {
+    const token = sessionStorage.getItem("token") || "";
+    const userType = sessionStorage.getItem("userType");
+    const userTypeParam = userType ? `&userType=${userType}` : "";
+    return `${process.env.REACT_APP_URL}/pixi-player?token=${token}&table=${encodeURIComponent(
+      JSON.stringify(selectedTable || {})
+    )}${userTypeParam}&isWebView=${webView}&forceOrientation=${isMobile ? "landscape" : ""}`;
+  };
+
+  const getPlayerIframeUrl = () => {
+    const token = sessionStorage.getItem("token") || "";
+    const userType = sessionStorage.getItem("userType");
+    const userTypeParam = userType ? `&userType=${userType}` : "";
+    return `${process.env.REACT_APP_URL}/player?token=${token}&table=${encodeURIComponent(
+      JSON.stringify(selectedTable || {})
+    )}${userTypeParam}&isWebView=${webView}&forceOrientation=${isMobile ? "landscape" : ""}`;
+  };
+
+  const getIframeClassName = () => {
+    return isMobile && preferredOrientation === "landscape-primary" ? "" : "h-full w-full";
+  };
+
   const getIframeStyle = () => {
-    // For desktop, use regular styling
     if (deviceType === "desktop") {
-      return {
-        width: "100%",
-        height: "100%"
-      };
+      return { width: "100%", height: "100%" };
     }
 
-    // For mobile with landscape content
     if (isMobile && preferredOrientation === "landscape-primary") {
-      // Calculate available screen dimensions
       const screenWidth = window.innerWidth;
       const screenHeight = window.innerHeight;
-
-      // Rotate the iframe 90 degrees
       return {
         transform: "rotate(90deg)",
         transformOrigin: "center center",
@@ -378,11 +394,58 @@ const SlotGame: React.FC = () => {
       };
     }
 
-    // Default styling
-    return {
-      width: "100%",
-      height: "100%"
-    };
+    return { width: "100%", height: "100%" };
+  };
+
+  const renderCasinoContent = () => {
+    if (isCasinoLoading) {
+      return <div className="w-full text-center p-4"><OverlaySpinner /></div>;
+    }
+    if (casinoUrl) {
+      return (
+        <iframe
+          src={casinoUrl}
+          className={isMobile && preferredOrientation === "portrait-primary" ? "" : "h-full w-full"}
+          title="Casino Game"
+          allow="picture-in-picture; autoplay; camera; microphone; geolocation; payment; encrypted-media; web-share; display-capture"
+          onLoad={() => console.log("Casino iframe loaded successfully")}
+          onError={(e) => console.error("Casino iframe error:", e)}
+        />
+      );
+    }
+    return <div className="w-full text-center p-4">Failed to load casino game</div>;
+  };
+
+  const renderGameIframe = () => {
+    if (!selectedTable) return null;
+
+    if (selectedTable.iframe === "pixi") {
+      return (
+        <iframe
+          src={getPixiIframeUrl()}
+          className={getIframeClassName()}
+          title="Embedded Page"
+          style={getIframeStyle() as React.CSSProperties}
+          allow="fullscreen; picture-in-picture; autoplay"
+          allowFullScreen
+        />
+      );
+    }
+
+    if (selectedTable.iframe === "others") {
+      return renderCasinoContent();
+    }
+
+    return (
+      <iframe
+        src={getPlayerIframeUrl()}
+        className={getIframeClassName()}
+        title="Embedded Page"
+        style={getIframeStyle() as React.CSSProperties}
+        allow="fullscreen; picture-in-picture; autoplay"
+        allowFullScreen
+      />
+    );
   };
 
   if (isValidating) {
@@ -401,26 +464,40 @@ const SlotGame: React.FC = () => {
     );
   }
 
-  // Create a container class for the iframe wrapper based on device type and orientation
+  const shouldShowSideNav = () => {
+    return deviceType === "desktop" && !sessionStorage.getItem("userType") && selectedTable?.iframe !== "others";
+  };
+
+  const getMainContainerClass = () => {
+    const baseClass = "flex w-full h-full p-0";
+    return deviceType === "desktop" ? `${baseClass} sm:p-12` : baseClass;
+  };
+
+  const getGameContainerClass = () => {
+    const baseClass = "flex";
+    if (!selectedTable || selectedTable.iframe === "others" || deviceType !== "desktop") {
+      return `${baseClass} ${iframeContainerClass}`;
+    }
+
+    const userType = sessionStorage.getItem("userType");
+    const widthClass = userType ? "sm:w-8/12" : "sm:w-10/12";
+    return `${baseClass} ${widthClass} sm:justify-between sm:mx-auto ${iframeContainerClass}`;
+  };
+
   const iframeContainerClass = isMobile && preferredOrientation === "landscape-primary"
     ? "fixed inset-0 flex items-center justify-center overflow-hidden"
     : "h-full w-full";
 
-
-
   return (
     <div
-    className="flex h-full w-full bg-cover bg-center relative"
-    style={{ backgroundImage: `url('/game_thumbnail_sprites/background.png')` }}
-  >
-    {/* <div className="absolute inset-0 bg-black bg-opacity-50"></div> */}
-      {/* Show rotation lock overlay when orientation doesn't match game requirements */}
+      className="flex h-full w-full bg-cover bg-center relative"
+      style={{ backgroundImage: `url('/game_thumbnail_sprites/background.png')` }}
+    >
       <RotationLockOverlay show={showRotationLockOverlay} />
 
       {!isValidating && (
         <>
-
-          {((deviceType === "desktop") && (!sessionStorage.getItem("userType")) && selectedTable?.iframe !== "others") && (
+          {shouldShowSideNav() && (
             <div
               className="hidden sm:flex w-[18%] min-w-[240px] max-w-[340px] bg-black/[0.75]"
               style={{ boxShadow: "2px 0 5px rgba(0, 0, 0, 0.5)" }}
@@ -428,81 +505,9 @@ const SlotGame: React.FC = () => {
               <SideNav excludeTableId={selectedTable?.tableId} />
             </div>
           )}
-          <div
-            className={`flex w-full h-full p-0 ${
-              deviceType === "desktop" && "sm:p-12"
-            }`}
-          >
-            <div
-              className={`flex ${
-               deviceType === "desktop" && selectedTable?.iframe !== "others" &&
-                (sessionStorage.getItem("userType")
-                  ? "sm:w-8/12 sm:justify-between sm:mx-auto"
-                  : "sm:w-10/12 sm:justify-between sm:mx-auto")
-              } ${iframeContainerClass}`}
-            >
-              {!isValidating && gameId && selectedTable ? (
-                <>
-                {selectedTable.iframe === "pixi" ? (
-                  <>
-                 {/* <PixiPlayer/> */}
-                 <iframe
-                  src={`${process.env.REACT_APP_URL}/pixi-player?token=${
-                    sessionStorage.getItem("token") || ""
-                  }&table=${encodeURIComponent(
-                    JSON.stringify(selectedTable || {})
-                  )}${
-                    sessionStorage.getItem("userType")
-                      ? `&userType=${sessionStorage.getItem("userType")}`
-                      : ""
-                  }&isWebView=${webView}&forceOrientation=${isMobile ? "landscape" : ""}`}
-                  className={isMobile && preferredOrientation === "landscape-primary" ? "" : "h-full w-full"}
-                  title="Embedded Page"
-                  style={getIframeStyle() as React.CSSProperties}
-                  allow="fullscreen; picture-in-picture; autoplay"
-                  allowFullScreen
-                />
-                  </>
-                ) : selectedTable.iframe === "others" ? (
-                  <>
-                  {isCasinoLoading ? (
-                    <div className="w-full text-center p-4"><OverlaySpinner /></div>
-                  ) : casinoUrl ? (
-                    <iframe
-                      src={casinoUrl}
-                      className={isMobile && preferredOrientation === "portrait-primary" ? "" : "h-full w-full"}
-                      title="Casino Game"
-                      // style={getIframeStyle() as React.CSSProperties}
-                      allow="picture-in-picture; autoplay; camera; microphone; geolocation; payment; encrypted-media; web-share; display-capture"
-                      onLoad={() => console.log("Casino iframe loaded successfully")}
-                      onError={(e) => console.error("Casino iframe error:", e)}
-                    />
-                  ) : (
-                    <div className="w-full text-center p-4">Failed to load casino game</div>
-                  )}
-                  </>
-                ) : (
-                  <>
-                <iframe
-                  src={`${process.env.REACT_APP_URL}/player?token=${
-                    sessionStorage.getItem("token") || ""
-                  }&table=${encodeURIComponent(
-                    JSON.stringify(selectedTable || {})
-                  )}${
-                    sessionStorage.getItem("userType")
-                      ? `&userType=${sessionStorage.getItem("userType")}`
-                      : ""
-                  }&isWebView=${webView}&forceOrientation=${isMobile ? "landscape" : ""}`}
-                  className={isMobile && preferredOrientation === "landscape-primary" ? "" : "h-full w-full"}
-                  title="Embedded Page"
-                  style={getIframeStyle() as React.CSSProperties}
-                  allow="fullscreen; picture-in-picture; autoplay"
-                  allowFullScreen
-                />
-                </>
-                )}
-                </>
-              ) : (
+          <div className={getMainContainerClass()}>
+            <div className={getGameContainerClass()}>
+              {gameId && selectedTable ? renderGameIframe() : (
                 <div className="w-full text-center p-4">Please Select a game to play</div>
               )}
             </div>
