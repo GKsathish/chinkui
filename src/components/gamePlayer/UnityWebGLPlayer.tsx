@@ -1,21 +1,17 @@
 import Cookies from "js-cookie";
-import axios from "axios";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate,useLocation } from "react-router-dom";
 import {
   detectDeviceType,
   detectPlatform,
-  detectTelegramBrowser,
   enterFullScreen,
   isFullScreen,
   isMobileDevice,
   lockOrientation,
 } from "../utils/fullscreenUtils";
-import { SpriteAnimation } from "../utils/SpriteAnimation";
 import { useWebSocket } from "../utils/WebSocket";
 import GamePopups from "../utils/GamePopups";
 import isOnline from "is-online";
-import { useLocation } from "react-router-dom";
 import { Table } from "../../store/tablesModel";
 import bougeeLogo from "../../assets/icons/bougeelogo.png";
 
@@ -89,10 +85,9 @@ const UnityWebGLPlayer: React.FC = () => {
     }
   }, [tableString, token, webview]);
 
-  console.log(table, tableString, webview);
   const handleVideoLoad = () => {
          // Send message to game.tsx when video loading is disabled
-                window.parent.postMessage({ type: "GAME_LOADED" }, "*");
+                window.parent.postMessage({ type: "GAME_LOADED" }, `${process.env.REACT_APP_URL}`);
     setIsVideoLoading(false);
   };
   const handleVideoError = (error: any) => {
@@ -136,18 +131,23 @@ const UnityWebGLPlayer: React.FC = () => {
     }
   }, []);
 
+  const isMobileIosOrUserType =
+    detectDeviceType() === "mobile" &&
+    (detectPlatform() === "ios" || userType);
+  const isPortraitPrimary = table?.orientation === "portrait-primary";
+  const widthPercentage = deviceType === "desktop" ? "80%" : "100%";
+  const containerHeight = isMobileIosOrUserType
+    ? "100%"
+    : isPortraitPrimary
+    ? "100%"
+    : `min(640px, ${widthPercentage})`;
+
   const styles = {
     container: {
       display: "flex",
       flexDirection: "column" as const,
-      width: table?.orientation === "portrait-primary" ? "420px" : "100%",
-      height:
-        detectDeviceType() === "mobile" &&
-        (detectPlatform() === "ios" || userType)
-          ? "100%"
-          : table?.orientation === "portrait-primary"
-          ? "100%"
-          : `min(640px, ${deviceType === "desktop" ? "80%" : "100%"})`,
+      width: isPortraitPrimary ? "420px" : "100%",
+      height: containerHeight,
       minHeight: deviceType === "desktop" ? "370px" : 0,
       position: "relative" as const,
       margin: "auto",
@@ -206,25 +206,6 @@ const UnityWebGLPlayer: React.FC = () => {
   };
   const isIOS =
     /iPad|iPhone|iPod/.test(navigator.userAgent) && !("MSStream" in window);
-  const shouldRotateVideo =
-    detectDeviceType() === "mobile" &&
-    (isIOS || userType) &&
-    !webViewState.isWebView &&
-    table?.slug !== "china-street";
-  const rotatedVideoStyles = shouldRotateVideo
-    ? {
-        position: "absolute" as const,
-        left: "50%",
-        top: "50%",
-        transformOrigin: "center center",
-        transform: "translate(-50%, -50%) rotate(90deg)",
-        objectFit: "cover" as const,
-        width: "100vh",
-        height: "100vw",
-        minWidth: "100vh",
-        minHeight: "100vw",
-      }
-    : {};
   const baseVideoStyles = {
     width: "100%",
     height: "100%",
@@ -239,32 +220,41 @@ const UnityWebGLPlayer: React.FC = () => {
     playsInline: true,
     WebkitPlaysinline: true,
   };
-  const videoStyles = { ...baseVideoStyles };
   const apiUrl = process.env.REACT_APP_API_URL;
+
+  const { sendMessage, addMessageListener, removeMessageListener } =
+    useWebSocket({
+      onOpen: () => console.log("UnityPlayer WebSocket connection opened"),
+      onClose: () => console.log("UnityPlayer WebSocket connection closed"),
+      onError: (error) => console.error("UnityPlayer WebSocket error:", error),
+    });
+
   useEffect(() => {
-    const redirectToHome = async () => {
+    const redirectToHome = () => {
       if (
         window.screen.orientation &&
         (window.screen.orientation as any).unlock
       ) {
         try {
-          await (window.screen.orientation as any).unlock();
+          (window.screen.orientation as any).unlock().catch((error: Error) => {
+            console.error("Failed to unlock orientation:", error);
+          });
         } catch (error) {
           console.error("Failed to unlock orientation:", error);
         }
       }
-      console.log(sessionStorage.getItem("token"));
-      await quitUnityInstance();
-      console.log("lobby new");
-      window.parent.postMessage({ type: "NAVIGATE_LOBBY" }, "*");
+      quitUnityInstance().catch((error: Error) => {
+        console.error("Failed to quit Unity instance:", error);
+      });
+      window.parent.postMessage({ type: "NAVIGATE_LOBBY" }, process.env.REACT_APP_URL || "*");
     };
 
-    const openInActivePopup = async () => {
+    const openInActivePopup = () => {
       setPopupName("Inactive");
       setIsPopupOpen(true);
     };
 
-    const openLowBalancePopup = async () => {
+    const openLowBalancePopup = () => {
       setPopupName("LowBalance");
       setIsPopupOpen(true);
     };
@@ -299,42 +289,34 @@ const UnityWebGLPlayer: React.FC = () => {
             "OnCrfTokenReceived",
             sessionStorage.getItem("csrfToken")
           );
-          // unityInstanceRef.current.SendMessage(
-          //   "WebSocket",
-          //   "GetHomeState",
-          // //  userType !== "BOT"?true:false
-          // false
-          // );
           unityInstanceRef.current.SendMessage(
             "WebSocket",
             "getBetInfo",
             sessionStorage.getItem("ws_info")
           );
-          console.log(sessionStorage.getItem("ws_info"), "betinfo");
           unityInstanceRef.current.SendMessage(
             "SoundManager",
             "MusicSettingsFromWeb",
-            parseFloat(Cookies.get(`${username}_music`) || "0.50")
+            Number.parseFloat(Cookies.get(`${username}_music`) || "0.50")
           );
           unityInstanceRef.current.SendMessage(
             "SoundManager",
             "SoundSettingsFromWeb",
-            parseFloat(Cookies.get(`${username}_sound`) || "0.50")
+            Number.parseFloat(Cookies.get(`${username}_sound`) || "0.50")
           );
         }
       }
-      console.log("__check Sending message to server in player: ", message);
       sendMessage(message);
     };
 
-    window.redirectToHome = redirectToHome;
-    window.setMusicVolume = setMusicVolume;
-    window.setSoundVolume = setSoundVolume;
-    window.SendMessageToJS = SendMessageToJS;
-    window.openInActivePopup = openInActivePopup;
-    window.openLowBalancePopup = openLowBalancePopup;
-  }, [navigate, username]);
-  console.log("abc");
+    (window as any).redirectToHome = redirectToHome;
+    (window as any).setMusicVolume = setMusicVolume;
+    (window as any).setSoundVolume = setSoundVolume;
+    (window as any).SendMessageToJS = SendMessageToJS;
+    (window as any).openInActivePopup = openInActivePopup;
+    (window as any).openLowBalancePopup = openLowBalancePopup;
+  }, [navigate, username, apiUrl, sendMessage]);
+
   const initializeUnityInstance = useCallback(async () => {
     // Guard against missing table or multiple initialization attempts
     if (!table || isInitializingRef.current) {
@@ -585,13 +567,6 @@ const UnityWebGLPlayer: React.FC = () => {
     };
   }, []);
 
-  const { sendMessage, addMessageListener, removeMessageListener } =
-    useWebSocket({
-      onOpen: () => console.log("UnityPlayer WebSocket connection opened"),
-      onClose: () => console.log("UnityPlayer WebSocket connection closed"),
-      onError: (error) => console.error("UnityPlayer WebSocket error:", error),
-    });
-
   const handleMessage = (data: any) => {
     if (unityInstanceRef.current) {
       unityInstanceRef.current.SendMessage(
@@ -674,10 +649,10 @@ const UnityWebGLPlayer: React.FC = () => {
     const tapLength = currentTime - lastTapRef.current;
 
     if (tapLength < 300 && tapLength > 0) {
-      requestAnimationFrame(async () => {
+      requestAnimationFrame(() => {
         try {
           // Enter full-screen first
-          await enterFullScreen(containerRef.current);
+          enterFullScreen(containerRef.current);
 
           // Delay locking orientation slightly to ensure full-screen is active
           setTimeout(() => {
@@ -758,7 +733,7 @@ const UnityWebGLPlayer: React.FC = () => {
           muted
           webkit-playsinline="true"
           controls={false}
-          style={videoStyles}
+          style={baseVideoStyles}
           onLoadedData={handleVideoLoad}
           onError={handleVideoError}
         />
