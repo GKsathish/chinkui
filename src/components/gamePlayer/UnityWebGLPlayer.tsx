@@ -646,9 +646,6 @@ const UnityWebGLPlayer: React.FC = () => {
       setIsPopupOpen(false);
     }
   }, [status]);
-  const handlePopupClose = () => {
-    setIsPopupOpen(false);
-  };
   const checkFullscreenStatus = () => {
     if (isMobileDevice() && !isIOS) {
       setShowOverlay(!isFullScreen());
@@ -785,7 +782,6 @@ const UnityWebGLPlayer: React.FC = () => {
       {isPopupOpen && (
         <GamePopups
           isOpen={isPopupOpen}
-          onClose={handlePopupClose}
           popupName={popupName}
           // shouldRotate={shouldRotateVideo || false}
         />

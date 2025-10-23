@@ -484,7 +484,6 @@ const PixiPlayer: React.FC = () => {
       {isPopupOpen && (
         <GamePopups
           isOpen={isPopupOpen}
-          onClose={() => setIsPopupOpen(false)}
           popupName={popupName}
         />
       )}

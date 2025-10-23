@@ -505,10 +505,6 @@ export default function Lobby() {
     };
   }, [isMobile, isLoading, isValidating]); // Added loading states to ensure refs are ready
 
-  const handlePopupClose = () => {
-    setIsPopupOpen(false);
-  };
-
   if (isValidating) {
     return (
       <div className="w-full p-2 text-red-600 text-3xl font-medium text-center">
@@ -741,7 +737,6 @@ export default function Lobby() {
         {isPopupOpen && (
         <GamePopups
           isOpen={isPopupOpen}
-          onClose={handlePopupClose}
           popupName={popupName}
         />
       )}

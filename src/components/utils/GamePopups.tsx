@@ -2,28 +2,21 @@ import React, { useState, useEffect } from "react";
 import "./modal/Modal.css";
 import warning from "../../assets/warning.png";
 import Button from "./buttons/Button";
-import { useNavigate } from "react-router-dom";
-import { useDispatch } from "react-redux";
+
 import { popupBg } from "../../assets/popupBg";
 interface GamepopupProps {
   isOpen: boolean;
-  onClose: () => void;
   popupName: string;
 }
 
 const GamePopups: React.FC<GamepopupProps> = ({
   isOpen,
-  onClose,
   popupName,
-
 }) => {
-  // const [isImageLoaded, setIsImageLoaded] = useState(false);
   const userType = sessionStorage.getItem("userType");
   const [isPortrait, setIsPortrait] = useState(
-    window.matchMedia("(orientation: portrait)").matches
+    globalThis.matchMedia("(orientation: portrait)").matches
   );
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
 
 
   // Update modal size based on device
@@ -37,10 +30,37 @@ const GamePopups: React.FC<GamepopupProps> = ({
     warningIconSize: "w-[24px] h-[24px] mr-[4px]",
   });
 
+  const logoutUser = () => {
+    globalThis.parent.postMessage({ type: "NAVIGATE_LOGIN" }, `${process.env.REACT_APP_URL}`);
+  };
+
+  const onReconnect = () => {
+    globalThis.location.reload();
+  };
+
+  const handleReloadPopup = () => {
+    globalThis.location.reload();
+  };
+
+  const handleLobbyNavigation = () => {
+    globalThis.parent.postMessage({ type: "NAVIGATE_LOBBY" }, `${process.env.REACT_APP_URL}`);
+  };
+
+  const onClickOk = () => {
+    const actionMap: Record<string, () => void> = {
+      Inactive: logoutUser,
+      NoInternet: handleReloadPopup,
+      InitializationError: handleReloadPopup,
+    };
+
+    const action = actionMap[popupName] || handleLobbyNavigation;
+    action();
+  };
+
   useEffect(() => {
     const updateDeviceType = () => {
-      const vw = window.innerWidth;
-      const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+      const vw = globalThis.innerWidth;
+      const isPortrait = globalThis.matchMedia("(orientation: portrait)").matches;
 
       setIsPortrait(isPortrait);
       if (vw >= 1024) {
@@ -65,115 +85,72 @@ const GamePopups: React.FC<GamepopupProps> = ({
           titleMargin: "-mt-[30px]",
           warningIconSize: "w-[24px] h-[24px] mr-[6px]",
         });
+      } else if (isPortrait) {
+        setModalStyles({
+          width: "380px",
+          height: "190px",
+          padding: "14px",
+          titleSize: "text-[18px] font-semibold",
+          textSize: "text-[15px]",
+          titleMargin: "-mt-[10px]",
+          warningIconSize: "w-[20px] h-[20px] mr-[4px]",
+        });
       } else {
-        if (isPortrait) {
-          setModalStyles({
-            width: "380px",
-            height: "190px",
-            padding: "14px",
-            titleSize: "text-[18px] font-semibold",
-            textSize: "text-[15px]",
-            titleMargin: "-mt-[10px]",
-            warningIconSize: "w-[20px] h-[20px] mr-[4px]",
-          });
-        } else {
-          setModalStyles({
-            width: "470px",
-            height: "230px",
-            padding: "44px",
-            titleSize: "text-[20px] font-semibold",
-            textSize: "text-[18px]",
-            titleMargin: "-mt-[26px]",
-            warningIconSize: "w-[24px] h-[24px] mr-[4px]",
-          });
-        }
+        setModalStyles({
+          width: "470px",
+          height: "230px",
+          padding: "44px",
+          titleSize: "text-[20px] font-semibold",
+          textSize: "text-[18px]",
+          titleMargin: "-mt-[26px]",
+          warningIconSize: "w-[24px] h-[24px] mr-[4px]",
+        });
       }
     };
 
     updateDeviceType();
-    window.addEventListener("resize", updateDeviceType);
-    return () => window.removeEventListener("resize", updateDeviceType);
+    globalThis.addEventListener("resize", updateDeviceType);
+    return () => globalThis.removeEventListener("resize", updateDeviceType);
   }, []);
 
-  if (!isOpen) return null;
-
-  let title = "";
-  let text1 = "";
-  let text2 = "";
-
-  switch (popupName) {
-    case "Inactive":
-      title = "Idle Time Out";
-      if (userType) {
-        text1 = "You have been logged out due to session timeout.";
-      } else {
-        text1 = "Your connection has timed out, \nreconnect to continue.";
-      }
-      break;
-    case "LowBalance":
-      title = "Low Balance";
-      if (userType) {
-        text1 =
-          "Your current balance is below the minimum balance to play this game. Kindly add balance to your wallet.";
-      } else {
-        text1 = "Balance is running low, recharge to continue playing.";
-        text2 =
-          "Kindly close the current window and go back to the menu to relaunch the game.";
-      }
-
-      break;
-    case "NoInternet":
-      title = "Slow Internet Connectivity";
-      if (userType) {
-        text1 =
-          "Slow or No internet connection. \nKindly check your internet settings.";
-      } else {
-        text1 =
-          "Internet connection is unstable, reconnect for a smooth gaming experience.";
-        text2 =
-          "Kindly close the current window and go back to the menu to relaunch the game.";
-      }
-      break;
-    case "InitializationError":
-      title = "Game Loading Error";
-      if (userType) {
-        text1 =
-          "Unable to load the game. \nPlease try again or contact support if the issue persists.";
-      } else {
-        text1 = "Game failed to initialize properly.";
-        text2 =
-          "Please close the current window and go back to the menu to relaunch the game.";
-      }
-      break;
-    default:
-      break;
-  }
-
-  const logoutUser = async () => {
-    window.parent.postMessage({ type: "NAVIGATE_LOGIN" }, "*");
-  };
-  const onReconnect = () => {
-    window.location.reload();
-  };
-
-  const onClickOk = () => {
-    if (popupName === "Inactive") {
-      logoutUser();
-    } else if (popupName === "NoInternet" || popupName === "InitializationError") {
-      window.location.reload();
-    } else {
-      window.parent.postMessage({ type: "NAVIGATE_LOBBY" }, "*");
-    }
-  };
   useEffect(() => {
     if (popupName === "Inactive" && !userType) {
       const timeout = setTimeout(() => {
-        logoutUser(); // Call logout function after 1 minute
-      }, 5000); // 60000ms = 1 minute
+        logoutUser();
+      }, 5000);
 
-      return () => clearTimeout(timeout); // Clear timeout if component unmounts or conditions change
+      return () => clearTimeout(timeout);
     }
-  }, [popupName, userType]);
+  }, [popupName, userType, logoutUser]);
+
+  if (!isOpen) return null;
+
+  const popupConfig: Record<string, { title: string; text1: (userType: string | null) => string; text2?: (userType: string | null) => string }> = {
+    Inactive: {
+      title: "Idle Time Out",
+      text1: (userType) => userType ? "You have been logged out due to session timeout." : "Your connection has timed out, \nreconnect to continue.",
+    },
+    LowBalance: {
+      title: "Low Balance",
+      text1: (userType) => userType ? "Your current balance is below the minimum balance to play this game. Kindly add balance to your wallet." : "Balance is running low, recharge to continue playing.",
+      text2: (userType) => userType ? "" : "Kindly close the current window and go back to the menu to relaunch the game.",
+    },
+    NoInternet: {
+      title: "Slow Internet Connectivity",
+      text1: (userType) => userType ? "Slow or No internet connection. \nKindly check your internet settings." : "Internet connection is unstable, reconnect for a smooth gaming experience.",
+      text2: (userType) => userType ? "" : "Kindly close the current window and go back to the menu to relaunch the game.",
+    },
+    InitializationError: {
+      title: "Game Loading Error",
+      text1: (userType) => userType ? "Unable to load the game. \nPlease try again or contact support if the issue persists." : "Game failed to initialize properly.",
+      text2: (userType) => userType ? "" : "Please close the current window and go back to the menu to relaunch the game.",
+    },
+  };
+
+  const config = popupConfig[popupName] || { title: "", text1: () => "", text2: () => "" };
+  const title = config.title;
+  const text1 = config.text1(userType);
+  const text2 = config.text2?.(userType) || "";
 
   return (
     <div
@@ -188,7 +165,7 @@ const GamePopups: React.FC<GamepopupProps> = ({
         position: "fixed",
       }}
     >
-      <div
+      <dialog
         className={`flex flex-col z-[150]`}
         style={{
           width: modalStyles.width,
@@ -198,8 +175,10 @@ const GamePopups: React.FC<GamepopupProps> = ({
           backgroundRepeat: "no-repeat",
           backgroundPosition: "center",
           backgroundSize: "cover",
+          border: "none",
+          borderRadius: "8px",
         }}
-        onClick={(e) => e.stopPropagation()}
+        open
       >
         {/* Title Section */}
         <div
@@ -260,16 +239,16 @@ const GamePopups: React.FC<GamepopupProps> = ({
                     strokeLinecap="round"
                   />
                 </svg>
-                <span
+                <button
                   onClick={onReconnect}
-                  className="text-[#FFE2A7] font-semibold text-[16px] cursor-pointer"
+                  className="text-[#FFE2A7] font-semibold text-[16px] cursor-pointer bg-transparent border-none p-0"
                   style={{
                     textDecoration: "underline", // Add underline effect
                     textDecorationColor: "#FFE2A7", // Match underline color with the text
                   }}
                 >
                   Reconnect
-                </span>
+                </button>
               </div>
             )}
 
@@ -284,7 +263,7 @@ const GamePopups: React.FC<GamepopupProps> = ({
             )}
           </div>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 };
