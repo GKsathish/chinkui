@@ -407,7 +407,7 @@ const UnityWebGLPlayer: React.FC = () => {
 
         script.onload = () => {
           if (typeof createUnityInstance !== "undefined" && canvasRef.current) {
-            createUnityInstance(canvasRef.current, config, (progress) => {
+            createUnityInstance(canvasRef.current, config, (progress: number) => {
               // Optional: Update loading progress
               console.log(
                 `Unity loading progress: ${(progress * 100).toFixed(1)}%`

@@ -9,7 +9,7 @@ export interface AuthState {
 
 class AuthService {
   private static instance: AuthService;
-  private authStateListeners: ((state: AuthState) => void)[] = [];
+  private readonly authStateListeners: ((state: AuthState) => void)[] = [];
 
   private constructor() {}
 
@@ -74,7 +74,7 @@ class AuthService {
   private navigateToLogin(): void {
     // Try postMessage first (for iframe scenarios)
     try {
-      window.parent.postMessage({ type: "NAVIGATE_LOGIN" }, "*");
+      window.parent.postMessage({ type: "NAVIGATE_LOGIN" }, `${process.env.REACT_APP_URL}`);
     } catch (error) {
       console.error("PostMessage failed:", error);
     }
